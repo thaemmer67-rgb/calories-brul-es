@@ -1,0 +1,2252 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#09090B">
+  <title>Balance Calorique — Suivi Quotidien</title>
+  <style>
+    /* ==========================================================================
+       DESIGN TOKENS & BASE RESET
+       Thème sombre minimaliste, haute lisibilité, 100 % autonome (zéro CDN)
+       ========================================================================== */
+    :root {
+      --bg-app: #09090B;
+      --bg-card: #121216;
+      --bg-card-elevated: #18181D;
+      --bg-input: #0D0D11;
+      --bg-sticky: rgba(9, 9, 11, 0.86);
+
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-medium: rgba(255, 255, 255, 0.13);
+      --border-focus: rgba(255, 255, 255, 0.28);
+
+      --text-primary: #FAFAFA;
+      --text-secondary: #A1A1AA;
+      --text-muted: #71717A;
+
+      --accent-green: #22C55E;
+      --accent-green-soft: rgba(34, 197, 94, 0.12);
+      --accent-neutral: #4ADE80;
+      --accent-orange: #F59E0B;
+      --accent-orange-soft: rgba(245, 158, 11, 0.12);
+      --accent-red: #EF4444;
+      --accent-red-soft: rgba(239, 68, 68, 0.12);
+      --accent-white-soft: rgba(255, 255, 255, 0.08);
+
+      --radius-xl: 20px;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 9px;
+      --radius-pill: 999px;
+
+      --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --transition-fast: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      --transition-smooth: 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html {
+      font-size: 16px;
+      background-color: var(--bg-app);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-app);
+      color: var(--text-primary);
+      line-height: 1.45;
+      min-height: 100dvh;
+      overflow-x: hidden;
+      padding-bottom: max(48px, env(safe-area-inset-bottom));
+    }
+
+    .tabular {
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+    }
+
+    /* ==========================================================================
+       LAYOUT CONTAINER
+       Centré à 520px max sur desktop, fluide et aéré sur mobile
+       ========================================================================== */
+    .app-shell {
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    /* ==========================================================================
+       1. TABLEAU DE BORD STICKY EN TEMPS RÉEL
+       ========================================================================== */
+    .dashboard-sticky {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: var(--bg-sticky);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      padding: 14px 0 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 18px;
+    }
+
+    .dashboard-inner {
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    .dashboard-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xl);
+      padding: 16px 16px 14px;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.15fr;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .metric-block {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .metric-block.align-right {
+      text-align: right;
+      align-items: flex-end;
+    }
+
+    .metric-label {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+    }
+
+    .metric-value {
+      font-size: 1.35rem;
+      font-weight: 650;
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+      color: var(--text-primary);
+    }
+
+    .metric-unit {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-left: 2px;
+    }
+
+    .balance-pill {
+      display: inline-flex;
+      align-items: baseline;
+      justify-content: flex-end;
+      gap: 2px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+      transition: background-color var(--transition-smooth), color var(--transition-smooth);
+    }
+
+    .balance-pill .metric-unit {
+      color: currentColor;
+      opacity: 0.8;
+    }
+
+    /* États visuels de la balance */
+    .state-deficit {
+      color: var(--accent-green);
+      background: var(--accent-green-soft);
+    }
+    .state-neutral {
+      color: var(--accent-neutral);
+      background: rgba(74, 222, 128, 0.10);
+    }
+    .state-slight-surplus {
+      color: var(--accent-orange);
+      background: var(--accent-orange-soft);
+    }
+    .state-high-surplus {
+      color: var(--accent-red);
+      background: var(--accent-red-soft);
+    }
+
+    /* Barre de progression discrète */
+    .progress-wrap {
+      margin-top: 13px;
+      margin-bottom: 12px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-pill);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: var(--radius-pill);
+      background: var(--accent-green);
+      transition: width 320ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color var(--transition-smooth);
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .status-badge {
+      font-weight: 500;
+      transition: color var(--transition-smooth);
+    }
+
+    /* Répartition de la dépense totale */
+    .breakdown-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .breakdown-item {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .breakdown-label {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .breakdown-val {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    /* ==========================================================================
+       CARTES & SECTIONS GÉNÉRIQUES
+       ========================================================================== */
+    .sections-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xl);
+      padding: 18px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .card-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .card-title {
+      font-size: 0.96rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    .card-subtitle {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+
+    .card-badge {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--bg-card-elevated);
+      border: 1px solid var(--border-subtle);
+      padding: 5px 10px;
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+    }
+
+    /* ==========================================================================
+       2. TIROIR / ACCORDÉON PROFIL
+       ========================================================================== */
+    .profile-card {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .profile-trigger {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: inherit;
+      padding: 15px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+      transition: background-color var(--transition-fast);
+    }
+
+    .profile-trigger:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .profile-trigger-left {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .profile-trigger-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .profile-summary {
+      font-size: 0.76rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .chevron-icon {
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      transition: transform var(--transition-smooth);
+    }
+
+    .profile-card.open .chevron-icon {
+      transform: rotate(180deg);
+    }
+
+    .profile-body {
+      display: none;
+      padding: 2px 18px 18px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .profile-card.open .profile-body {
+      display: block;
+      animation: fadeSlideDown 200ms ease-out;
+    }
+
+    @keyframes fadeSlideDown {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ==========================================================================
+       FORMULAIRES, CHAMPS, SEGMENTS, INTERRUPTEURS
+       ========================================================================== */
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .form-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .field-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .field-hint {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input {
+      width: 100%;
+      height: 44px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 0 12px;
+      outline: none;
+      transition: border-color var(--transition-fast), background-color var(--transition-fast);
+      -moz-appearance: textfield;
+    }
+
+    .input::-webkit-outer-spin-button,
+    .input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .input::placeholder {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .input:focus {
+      border-color: var(--border-focus);
+      background: #101015;
+    }
+
+    .input.has-suffix {
+      padding-right: 46px;
+    }
+
+    .input-suffix {
+      position: absolute;
+      right: 12px;
+      font-size: 0.76rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    /* Sélecteur segmenté (onglets) */
+    .segmented {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 3px;
+      gap: 3px;
+      margin-bottom: 14px;
+    }
+
+    .seg-btn {
+      height: 36px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 550;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background-color var(--transition-fast), color var(--transition-fast);
+      padding: 0 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .seg-btn.active {
+      background: var(--bg-card-elevated);
+      color: var(--text-primary);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    }
+
+    /* Interrupteur (Toggle Switch) */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 12px;
+      margin-top: 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .toggle-title {
+      font-size: 0.84rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .toggle-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .switch {
+      position: relative;
+      width: 42px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .switch-track {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-pill);
+      transition: background-color var(--transition-fast);
+    }
+
+    .switch-track::after {
+      content: "";
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 3px;
+      top: 3px;
+      background: #FAFAFA;
+      border-radius: 50%;
+      transition: transform var(--transition-fast);
+    }
+
+    .switch input:checked + .switch-track {
+      background: var(--accent-green);
+    }
+
+    .switch input:checked + .switch-track::after {
+      transform: translateX(18px);
+    }
+
+    /* Boutons principaux & secondaires */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 44px;
+      padding: 0 16px;
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background-color var(--transition-fast), border-color var(--transition-fast), transform 100ms ease, opacity var(--transition-fast);
+    }
+
+    .btn:active {
+      transform: scale(0.985);
+    }
+
+    .btn-primary {
+      background: var(--text-primary);
+      color: #09090B;
+      width: 100%;
+    }
+
+    .btn-primary:hover {
+      background: #E4E4E7;
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-subtle {
+      height: auto;
+      padding: 7px 11px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: var(--bg-card-elevated);
+      border-color: var(--border-subtle);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+    }
+
+    .btn-subtle:hover {
+      border-color: var(--border-medium);
+      color: var(--text-primary);
+    }
+
+    /* Aperçu calcul tapis + action */
+    .treadmill-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .preview-box {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .preview-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .preview-value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .treadmill-footer .btn-primary {
+      width: auto;
+      min-width: 158px;
+      padding: 0 18px;
+    }
+
+    /* ==========================================================================
+       4. PAS QUOTIDIENS (NEAT)
+       ========================================================================== */
+    .steps-summary-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+      padding: 11px 13px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+
+    .steps-summary-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .steps-net-label {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+    }
+
+    .steps-net-val {
+      font-size: 0.94rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .steps-kcal-val {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--accent-green);
+    }
+
+    .auto-deduct-wrap {
+      margin-top: 8px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    /* ==========================================================================
+       5. MUSCULATION & AUTRES ACTIVITÉS
+       ========================================================================== */
+    .muscu-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .toggle-card-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      padding: 13px 14px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+      transition: all var(--transition-fast);
+    }
+
+    .toggle-card-btn:hover {
+      border-color: var(--border-medium);
+    }
+
+    .toggle-card-btn.active {
+      background: var(--accent-green-soft);
+      border-color: rgba(34, 197, 94, 0.45);
+      color: var(--text-primary);
+    }
+
+    .toggle-card-top {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .toggle-card-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .toggle-card-kcal {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .toggle-card-btn.active .toggle-card-kcal {
+      color: var(--accent-green);
+    }
+
+    .check-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border-medium);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all var(--transition-fast);
+    }
+
+    .toggle-card-btn.active .check-dot {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 14px 0;
+    }
+
+    .chips-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 10px;
+    }
+
+    .chip {
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .chip:hover {
+      border-color: var(--border-medium);
+      color: var(--text-primary);
+    }
+
+    .chip.active {
+      background: var(--text-primary);
+      border-color: var(--text-primary);
+      color: #09090B;
+      font-weight: 600;
+    }
+
+    .inline-add-row {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr auto;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .inline-add-row .btn-primary {
+      width: auto;
+      padding: 0 16px;
+      white-space: nowrap;
+    }
+
+    /* ==========================================================================
+       6. CALORIES MANGÉES & TEF
+       ========================================================================== */
+    .tef-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+      padding: 10px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+
+    .tef-info {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .tef-label {
+      font-size: 0.76rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .tef-value {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .tef-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tef-control-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .tef-input {
+      width: 62px;
+      height: 34px;
+      text-align: center;
+      padding: 0 20px 0 8px;
+      font-size: 0.84rem;
+    }
+
+    .tef-control .input-suffix {
+      right: 8px;
+      font-size: 0.74rem;
+    }
+
+    /* ==========================================================================
+       LISTES D'HISTORIQUE (SÉANCES, ACTIVITÉS, REPAS)
+       ========================================================================== */
+    .log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      margin-top: 14px;
+    }
+
+    .log-list:empty {
+      display: none;
+    }
+
+    .log-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 11px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      animation: fadeSlideDown 180ms ease-out;
+    }
+
+    .log-item-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .log-item-title {
+      font-size: 0.84rem;
+      font-weight: 550;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .log-item-meta {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .log-item-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .log-item-kcal {
+      font-size: 0.86rem;
+      font-weight: 650;
+      color: var(--text-primary);
+    }
+
+    .btn-icon-delete {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background-color var(--transition-fast), color var(--transition-fast);
+    }
+
+    .btn-icon-delete:hover {
+      background: var(--accent-red-soft);
+      color: var(--accent-red);
+    }
+
+    /* ==========================================================================
+       7. RÉINITIALISATION & TOAST
+       ========================================================================== */
+    .reset-section {
+      margin-top: 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-reset {
+      width: 100%;
+      height: 46px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: 0.86rem;
+      font-weight: 550;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .btn-reset:hover {
+      border-color: var(--border-medium);
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .btn-reset.confirming {
+      background: var(--accent-red-soft);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: var(--accent-red);
+      font-weight: 650;
+    }
+
+    .reset-note {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* Notification toast discrète */
+    .toast {
+      position: fixed;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      background: #1F1F26;
+      border: 1px solid var(--border-medium);
+      color: var(--text-primary);
+      padding: 10px 16px;
+      border-radius: var(--radius-pill);
+      font-size: 0.82rem;
+      font-weight: 500;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease, transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      z-index: 100;
+      white-space: nowrap;
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Utilitaires d'affichage */
+    .hidden {
+      display: none !important;
+    }
+
+    /* Adaptations petits écrans (< 380px) */
+    @media (max-width: 380px) {
+      .metric-value { font-size: 1.18rem; }
+      .balance-pill { font-size: 1.12rem; padding: 3px 8px; }
+      .inline-add-row {
+        grid-template-columns: 1fr 1fr;
+      }
+      .inline-add-row .btn-primary {
+        grid-column: 1 / -1;
+        width: 100%;
+      }
+      .treadmill-footer {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .treadmill-footer .btn-primary {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ======================================================================
+       1. TABLEAU DE BORD EN TEMPS RÉEL (STICKY)
+       ====================================================================== -->
+  <header class="dashboard-sticky" aria-label="Tableau de bord calorique">
+    <div class="dashboard-inner">
+      <div class="dashboard-card">
+        <div class="metrics-grid">
+          <div class="metric-block">
+            <span class="metric-label">Dépensé</span>
+            <div class="metric-value tabular">
+              <span id="dash-spent">1 905</span><span class="metric-unit">kcal</span>
+            </div>
+          </div>
+
+          <div class="metric-block">
+            <span class="metric-label">Mangé</span>
+            <div class="metric-value tabular">
+              <span id="dash-eaten">0</span><span class="metric-unit">kcal</span>
+            </div>
+          </div>
+
+          <div class="metric-block align-right">
+            <span class="metric-label">Balance</span>
+            <div id="dash-balance-pill" class="balance-pill state-deficit tabular">
+              <span id="dash-balance">-1 905</span><span class="metric-unit">kcal</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Barre de progression discrète -->
+        <div class="progress-wrap">
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="dash-progress-track">
+            <div class="progress-fill" id="dash-progress-fill"></div>
+          </div>
+          <div class="progress-meta">
+            <span id="dash-status-text" class="status-badge">Déficit calorique</span>
+            <span id="dash-ratio-text" class="tabular">0 % de la dépense</span>
+          </div>
+        </div>
+
+        <!-- Répartition de la dépense totale -->
+        <div class="breakdown-bar" aria-label="Répartition de la dépense">
+          <div class="breakdown-item">
+            <span class="breakdown-label">BMR</span>
+            <span class="breakdown-val tabular" id="bd-bmr">1 905</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Pas</span>
+            <span class="breakdown-val tabular" id="bd-steps">0</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Sport</span>
+            <span class="breakdown-val tabular" id="bd-sport">0</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">TEF</span>
+            <span class="breakdown-val tabular" id="bd-tef">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================================================================
+       CONTENU PRINCIPAL (ÉCRAN UNIQUE)
+       ====================================================================== -->
+  <main class="app-shell">
+    <div class="sections-stack">
+
+      <!-- ==================================================================
+           2. PROFIL ET MÉTABOLISME DE BASE (BMR) — TIROIR REPLIÉ PAR DÉFAUT
+           ================================================================== -->
+      <section class="card profile-card" id="profile-card">
+        <button type="button" class="profile-trigger" id="profile-toggle" aria-expanded="false" aria-controls="profile-body">
+          <div class="profile-trigger-left">
+            <span class="profile-trigger-title">Mon profil</span>
+            <span class="profile-summary tabular" id="profile-summary">Homme · 19 ans · 188 cm · 82 kg · BMR 1 905 kcal</span>
+          </div>
+          <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+
+        <div class="profile-body" id="profile-body">
+          <div class="field" style="margin-top: 12px; margin-bottom: 12px;">
+            <span class="field-label">Sexe biologique <span class="field-hint">Formule Mifflin-St Jeor</span></span>
+            <div class="segmented" style="margin-bottom: 0;">
+              <button type="button" class="seg-btn active" data-sex="male" id="sex-male">Homme</button>
+              <button type="button" class="seg-btn" data-sex="female" id="sex-female">Femme</button>
+            </div>
+          </div>
+
+          <div class="form-grid-3">
+            <div class="field">
+              <label class="field-label" for="prof-age">Âge</label>
+              <div class="input-wrap">
+                <input type="number" id="prof-age" class="input has-suffix tabular" inputmode="numeric" min="10" max="120" step="1" value="19">
+                <span class="input-suffix">ans</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="prof-height">Taille</label>
+              <div class="input-wrap">
+                <input type="number" id="prof-height" class="input has-suffix tabular" inputmode="numeric" min="100" max="250" step="1" value="188">
+                <span class="input-suffix">cm</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="prof-weight">Poids</label>
+              <div class="input-wrap">
+                <input type="number" id="prof-weight" class="input has-suffix tabular" inputmode="decimal" min="30" max="250" step="0.1" value="82">
+                <span class="input-suffix">kg</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           6. CALORIES MANGÉES ET CALCUL DU TEF (Placé haut pour accès rapide)
+           ================================================================== -->
+      <section class="card" aria-labelledby="title-food">
+        <div class="card-header">
+          <div class="card-title-group">
+            <h2 class="card-title" id="title-food">Calories mangées</h2>
+            <span class="card-subtitle">Ajoutez vos repas au fil de la journée</span>
+          </div>
+          <span class="card-badge tabular" id="badge-eaten">0 kcal</span>
+        </div>
+
+        <form id="food-form" class="inline-add-row" autocomplete="off">
+          <div class="input-wrap">
+            <input type="number" id="food-kcal" class="input has-suffix tabular" inputmode="numeric" min="1" step="1" placeholder="Ex: 650" aria-label="Calories du repas">
+            <span class="input-suffix">kcal</span>
+          </div>
+          <input type="text" id="food-label" class="input" maxlength="36" placeholder="Repas (optionnel)" aria-label="Nom du repas">
+          <button type="submit" class="btn btn-primary">+ Ajouter</button>
+        </form>
+
+        <!-- Liste des repas du jour -->
+        <div class="log-list" id="food-list"></div>
+
+        <!-- Paramètre TEF discret -->
+        <div class="tef-bar">
+          <div class="tef-info">
+            <span class="tef-label">Effet Thermique (TEF) intégré</span>
+            <span class="tef-value tabular" id="tef-display">+0 kcal</span>
+          </div>
+          <div class="tef-control">
+            <label class="tef-control-label" for="tef-rate">Taux</label>
+            <div class="input-wrap">
+              <input type="number" id="tef-rate" class="input tef-input tabular" inputmode="decimal" min="0" max="30" step="1" value="10">
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           4. PAS QUOTIDIENS (NEAT) ET GESTION DU DOUBLE COMPTAGE
+           ================================================================== -->
+      <section class="card" aria-labelledby="title-steps">
+        <div class="card-header">
+          <div class="card-title-group">
+            <h2 class="card-title" id="title-steps">Pas quotidiens (NEAT)</h2>
+            <span class="card-subtitle">Calculé selon votre taille et votre poids</span>
+          </div>
+          <span class="card-badge tabular" id="badge-steps">+0 kcal</span>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="field">
+            <label class="field-label" for="steps-total">Pas totaux du jour</label>
+            <div class="input-wrap">
+              <input type="number" id="steps-total" class="input has-suffix tabular" inputmode="numeric" min="0" step="100" placeholder="0">
+              <span class="input-suffix">pas</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="steps-deduct">Pas à déduire <span class="field-hint">tapis/course</span></label>
+            <div class="input-wrap">
+              <input type="number" id="steps-deduct" class="input has-suffix tabular" inputmode="numeric" min="0" step="100" placeholder="0">
+              <span class="input-suffix">pas</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bouton discret d'auto-estimation si des séances de tapis avec durée existent -->
+        <div class="auto-deduct-wrap hidden" id="auto-deduct-wrap">
+          <button type="button" class="btn btn-subtle tabular" id="btn-auto-deduct">
+            Estimer depuis tapis (~0 pas)
+          </button>
+        </div>
+
+        <div class="steps-summary-bar">
+          <div class="steps-summary-left">
+            <span class="steps-net-label">Pas nets comptabilisés</span>
+            <span class="steps-net-val tabular" id="steps-net-display">0 pas · 0,0 km</span>
+          </div>
+          <span class="steps-kcal-val tabular" id="steps-kcal-display">+0 kcal</span>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           3. MODULE TAPIS DE MARCHE (2 MODES AU CHOIX)
+           ================================================================== -->
+      <section class="card" aria-labelledby="title-treadmill">
+        <div class="card-header">
+          <div class="card-title-group">
+            <h2 class="card-title" id="title-treadmill">Tapis de marche</h2>
+            <span class="card-subtitle">Calories nettes réelles (BMR déduit)</span>
+          </div>
+          <span class="card-badge tabular" id="badge-treadmill">+0 kcal</span>
+        </div>
+
+        <!-- Sélecteur segmenté des 2 modes -->
+        <div class="segmented" role="tablist" aria-label="Mode de calcul tapis">
+          <button type="button" class="seg-btn active" role="tab" aria-selected="true" id="tab-tm-displayed" data-mode="displayed">
+            Calories affichées
+          </button>
+          <button type="button" class="seg-btn" role="tab" aria-selected="false" id="tab-tm-acsm" data-mode="acsm">
+            Calcul scientifique (ACSM)
+          </button>
+        </div>
+
+        <form id="treadmill-form" autocomplete="off">
+          <!-- Mode 1 : Calories affichées -->
+          <div id="tm-panel-displayed">
+            <div class="form-grid-2">
+              <div class="field">
+                <label class="field-label" for="tm-disp-kcal">Affichées tapis</label>
+                <div class="input-wrap">
+                  <input type="number" id="tm-disp-kcal" class="input has-suffix tabular" inputmode="numeric" min="0" step="1" placeholder="Ex: 350">
+                  <span class="input-suffix">kcal</span>
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label" for="tm-disp-dur">Durée <span class="field-hint">optionnel</span></label>
+                <div class="input-wrap">
+                  <input type="number" id="tm-disp-dur" class="input has-suffix tabular" inputmode="numeric" min="0" step="1" placeholder="Ex: 35">
+                  <span class="input-suffix">min</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mode 2 : Calcul scientifique ACSM -->
+          <div id="tm-panel-acsm" class="hidden">
+            <div class="form-grid-3">
+              <div class="field">
+                <label class="field-label" for="tm-acsm-speed">Vitesse</label>
+                <div class="input-wrap">
+                  <input type="number" id="tm-acsm-speed" class="input has-suffix tabular" inputmode="decimal" min="0.5" max="25" step="0.1" placeholder="5.5">
+                  <span class="input-suffix">km/h</span>
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label" for="tm-acsm-incline">Pente</label>
+                <div class="input-wrap">
+                  <input type="number" id="tm-acsm-incline" class="input has-suffix tabular" inputmode="decimal" min="0" max="40" step="0.5" placeholder="8">
+                  <span class="input-suffix">%</span>
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label" for="tm-acsm-dur">Durée</label>
+                <div class="input-wrap">
+                  <input type="number" id="tm-acsm-dur" class="input has-suffix tabular" inputmode="numeric" min="1" max="300" step="1" placeholder="30">
+                  <span class="input-suffix">min</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Option commune : Sans tenir les poignées -->
+          <label class="toggle-row" for="tm-no-handles">
+            <div class="toggle-info">
+              <span class="toggle-title">Sans tenir les poignées</span>
+              <span class="toggle-desc" id="tm-handles-hint">Actif : aucune pénalité appliquée</span>
+            </div>
+            <span class="switch">
+              <input type="checkbox" id="tm-no-handles" checked>
+              <span class="switch-track"></span>
+            </span>
+          </label>
+
+          <!-- Aperçu en direct + bouton valider -->
+          <div class="treadmill-footer">
+            <div class="preview-box">
+              <span class="preview-label" id="tm-preview-meta">Correction -18 % · Net réel</span>
+              <span class="preview-value tabular" id="tm-preview-kcal">0 kcal</span>
+            </div>
+            <button type="submit" class="btn btn-primary" id="btn-add-treadmill" disabled>
+              Ajouter la séance
+            </button>
+          </div>
+        </form>
+
+        <!-- Liste des séances de tapis enregistrées -->
+        <div class="log-list" id="treadmill-list"></div>
+      </section>
+
+      <!-- ==================================================================
+           5. MUSCULATION ET AUTRES ACTIVITÉS SPORTIVES
+           ================================================================== -->
+      <section class="card" aria-labelledby="title-sport">
+        <div class="card-header">
+          <div class="card-title-group">
+            <h2 class="card-title" id="title-sport">Musculation & autres sports</h2>
+            <span class="card-subtitle">Sélection rapide ou saisie libre</span>
+          </div>
+          <span class="card-badge tabular" id="badge-other-sport">+0 kcal</span>
+        </div>
+
+        <!-- Boutons rapides Musculation -->
+        <div class="muscu-grid">
+          <button type="button" class="toggle-card-btn" id="btn-muscu-upper" aria-pressed="false">
+            <div class="toggle-card-top">
+              <span class="toggle-card-name">Haut du corps</span>
+              <span class="check-dot" aria-hidden="true">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                  <path d="M2.5 6.2L4.8 8.5L9.5 3.5" stroke="#09090B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </div>
+            <span class="toggle-card-kcal tabular">+150 kcal</span>
+          </button>
+
+          <button type="button" class="toggle-card-btn" id="btn-muscu-lower" aria-pressed="false">
+            <div class="toggle-card-top">
+              <span class="toggle-card-name">Bas du corps</span>
+              <span class="check-dot" aria-hidden="true">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                  <path d="M2.5 6.2L4.8 8.5L9.5 3.5" stroke="#09090B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </div>
+            <span class="toggle-card-kcal tabular">+200 kcal</span>
+          </button>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Raccourcis autres activités -->
+        <div class="chips-row" id="activity-presets" aria-label="Raccourcis d'activités">
+          <button type="button" class="chip active" data-preset="Course à pied">Course à pied</button>
+          <button type="button" class="chip" data-preset="Football">Football</button>
+          <button type="button" class="chip" data-preset="Autre">Autre</button>
+        </div>
+
+        <form id="activity-form" class="inline-add-row" autocomplete="off">
+          <div class="input-wrap">
+            <input type="number" id="act-kcal" class="input has-suffix tabular" inputmode="numeric" min="1" step="1" placeholder="Ex: 300" aria-label="Calories de l'activité">
+            <span class="input-suffix">kcal</span>
+          </div>
+          <input type="text" id="act-label" class="input" maxlength="36" placeholder="Libellé (optionnel)" aria-label="Libellé de l'activité">
+          <button type="submit" class="btn btn-primary">Ajouter</button>
+        </form>
+
+        <!-- Liste des autres activités -->
+        <div class="log-list" id="activity-list"></div>
+      </section>
+
+      <!-- ==================================================================
+           7. RÉINITIALISATION DE LA JOURNÉE
+           ================================================================== -->
+      <section class="reset-section" aria-label="Réinitialisation">
+        <button type="button" class="btn-reset" id="btn-reset">
+          Réinitialiser la journée
+        </button>
+        <p class="reset-note">Conserve votre profil et votre taux de TEF · Sauvegarde locale automatique</p>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Toast de retour visuel discret -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    /**
+     * =========================================================================
+     * APPLICATION DE BALANCE CALORIQUE QUOTIDIENNE
+     * Architecture modulaire autonome : État -> Calculs -> Rendu -> Persistance
+     * =========================================================================
+     */
+    (() => {
+      'use strict';
+
+      const STORAGE_KEY = 'caloric_balance_app_v1';
+
+      /* -----------------------------------------------------------------------
+         ÉTAT PAR DÉFAUT
+         ----------------------------------------------------------------------- */
+      const getDefaultState = () => ({
+        profile: {
+          sex: 'male',    // 'male' | 'female'
+          age: 19,
+          height: 188,    // cm
+          weight: 82      // kg
+        },
+        settings: {
+          tefRate: 10     // %
+        },
+        daily: {
+          stepsTotal: '',
+          stepsDeduct: '',
+          treadmillSessions: [], // { id, mode, displayedKcal, duration, speed, incline, noHandles }
+          muscuUpper: false,     // +150 kcal
+          muscuLower: false,     // +200 kcal
+          otherActivities: [],   // { id, label, kcal }
+          meals: []              // { id, label, kcal, time }
+        }
+      });
+
+      let state = loadState();
+      let currentTreadmillMode = 'displayed'; // 'displayed' | 'acsm'
+      let selectedActivityPreset = 'Course à pied';
+      let resetConfirmTimer = null;
+      let toastTimer = null;
+
+      /* -----------------------------------------------------------------------
+         PERSISTANCE LOCALSTORAGE (SÉCURISÉE)
+         ----------------------------------------------------------------------- */
+      function loadState() {
+        const defaults = getDefaultState();
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return defaults;
+          const parsed = JSON.parse(raw);
+
+          return {
+            profile: {
+              sex: parsed?.profile?.sex === 'female' ? 'female' : 'male',
+              age: toPositiveNum(parsed?.profile?.age, defaults.profile.age),
+              height: toPositiveNum(parsed?.profile?.height, defaults.profile.height),
+              weight: toPositiveNum(parsed?.profile?.weight, defaults.profile.weight)
+            },
+            settings: {
+              tefRate: clampNum(parsed?.settings?.tefRate, 0, 30, defaults.settings.tefRate)
+            },
+            daily: {
+              stepsTotal: parsed?.daily?.stepsTotal ?? '',
+              stepsDeduct: parsed?.daily?.stepsDeduct ?? '',
+              treadmillSessions: Array.isArray(parsed?.daily?.treadmillSessions) ? parsed.daily.treadmillSessions : [],
+              muscuUpper: Boolean(parsed?.daily?.muscuUpper),
+              muscuLower: Boolean(parsed?.daily?.muscuLower),
+              otherActivities: Array.isArray(parsed?.daily?.otherActivities) ? parsed.daily.otherActivities : [],
+              meals: Array.isArray(parsed?.daily?.meals) ? parsed.daily.meals : []
+            }
+          };
+        } catch (err) {
+          console.warn('Lecture localStorage impossible, utilisation des valeurs par défaut.', err);
+          return defaults;
+        }
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (err) {
+          console.warn('Écriture localStorage impossible.', err);
+        }
+      }
+
+      /* -----------------------------------------------------------------------
+         UTILITAIRES NUMÉRIQUES & FORMATAGE
+         ----------------------------------------------------------------------- */
+      function toPositiveNum(val, fallback = 0) {
+        const n = parseFloat(val);
+        return Number.isFinite(n) && n > 0 ? n : fallback;
+      }
+
+      function toNonNegNum(val) {
+        const n = parseFloat(val);
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+      }
+
+      function clampNum(val, min, max, fallback) {
+        const n = parseFloat(val);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.min(max, Math.max(min, n));
+      }
+
+      function formatInt(num) {
+        return Math.round(num).toLocaleString('fr-FR');
+      }
+
+      function formatSignedInt(num) {
+        const r = Math.round(num);
+        if (r > 0) return '+' + r.toLocaleString('fr-FR');
+        if (r < 0) return '−' + Math.abs(r).toLocaleString('fr-FR');
+        return '0';
+      }
+
+      function createId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function showToast(message) {
+        const el = dom.toast;
+        el.textContent = message;
+        el.classList.add('visible');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          el.classList.remove('visible');
+        }, 2200);
+      }
+
+      /* -----------------------------------------------------------------------
+         MOTEUR DE CALCULS PHYSIOLOGIQUES (FONCTIONS PURES)
+         ----------------------------------------------------------------------- */
+
+      /**
+       * Calcul exact du BMR via Mifflin-St Jeor
+       * Homme : (10 * poids_kg) + (6.25 * taille_cm) - (5 * âge) + 5
+       * Femme : (10 * poids_kg) + (6.25 * taille_cm) - (5 * âge) - 161
+       */
+      function calculateBMR(profile) {
+        const base = (10 * profile.weight) + (6.25 * profile.height) - (5 * profile.age);
+        const raw = profile.sex === 'female' ? base - 161 : base + 5;
+        return Math.max(0, raw);
+      }
+
+      /**
+       * Calcul des calories nettes d'une séance de tapis (Mode 1 ou Mode 2 ACSM)
+       * Intègre la déduction du BMR sur la durée et la pénalité poignées (-20 % si tenues)
+       */
+      function calculateTreadmillNetKcal(session, profile, bmr) {
+        let netBeforeHandles = 0;
+
+        if (session.mode === 'displayed') {
+          const displayed = toNonNegNum(session.displayedKcal);
+          const duration = toNonNegNum(session.duration);
+          if (displayed <= 0) return 0;
+
+          // Correction machine -18 % (multiplicateur 0.82)
+          const corrected = displayed * 0.82;
+          // Déduction BMR si durée renseignée
+          const bmrDeduction = duration > 0 ? (bmr / 1440) * duration : 0;
+          netBeforeHandles = Math.max(0, corrected - bmrDeduction);
+        } else {
+          // Mode 2 : Équation métabolique ACSM exacte
+          const speedKmh = toNonNegNum(session.speed);
+          const inclinePct = toNonNegNum(session.incline);
+          const duration = toNonNegNum(session.duration);
+          if (speedKmh <= 0 || duration <= 0) return 0;
+
+          const S = speedKmh * (1000 / 60); // m/min
+          const g = inclinePct / 100;       // pente décimale
+
+          // Marche (<= 8 km/h) vs Course (> 8 km/h)
+          const vo2 = speedKmh <= 8
+            ? 3.5 + (0.1 * S) + (1.8 * S * g)
+            : 3.5 + (0.2 * S) + (0.9 * S * g);
+
+          const grossKcal = ((vo2 * profile.weight) / 1000) * 5 * duration;
+          const bmrDeduction = (bmr / 1440) * duration;
+          netBeforeHandles = Math.max(0, grossKcal - bmrDeduction);
+        }
+
+        // Si l'utilisateur tient les poignées (noHandles === false), réduction supplémentaire de 20 %
+        const finalNet = session.noHandles ? netBeforeHandles : netBeforeHandles * 0.80;
+        return Math.max(0, finalNet);
+      }
+
+      /**
+       * Estimation réaliste des pas effectués sur tapis (pour éviter le double comptage)
+       * - Mode ACSM : distance réelle / longueur de foulée
+       * - Mode Calories affichées avec durée : ~110 pas/min
+       */
+      function estimateTreadmillSteps(sessions, profile) {
+        const strideM = (profile.height / 100) * 0.415;
+        let totalEstimated = 0;
+
+        for (const s of sessions) {
+          const dur = toNonNegNum(s.duration);
+          if (dur <= 0) continue;
+
+          if (s.mode === 'acsm' && toNonNegNum(s.speed) > 0 && strideM > 0) {
+            const distanceM = (toNonNegNum(s.speed) * 1000) * (dur / 60);
+            // Légère adaptation de la foulée en course (> 8 km/h)
+            const effectiveStride = toNonNegNum(s.speed) > 8 ? strideM * 1.15 : strideM;
+            totalEstimated += distanceM / effectiveStride;
+          } else {
+            totalEstimated += dur * 110;
+          }
+        }
+        return Math.round(totalEstimated);
+      }
+
+      /**
+       * Calcul des pas nets et de leur dépense calorique (NEAT)
+       * Foulée ≈ (taille_cm / 100) * 0.415
+       * Distance_km = (pas_nets * foulée) / 1000
+       * kcal nettes = distance_km * poids_kg * 0.55
+       */
+      function calculateStepsMetrics(totalRaw, deductRaw, profile) {
+        const total = Math.floor(toNonNegNum(totalRaw));
+        const deduct = Math.floor(toNonNegNum(deductRaw));
+        const netSteps = Math.max(0, total - deduct);
+
+        const strideM = (profile.height / 100) * 0.415;
+        const distanceKm = (netSteps * strideM) / 1000;
+        const kcal = distanceKm * profile.weight * 0.55;
+
+        return { netSteps, distanceKm, kcal };
+      }
+
+      /* -----------------------------------------------------------------------
+         RÉFÉRENCES DOM
+         ----------------------------------------------------------------------- */
+      const dom = {
+        // Dashboard
+        dashSpent: document.getElementById('dash-spent'),
+        dashEaten: document.getElementById('dash-eaten'),
+        dashBalance: document.getElementById('dash-balance'),
+        dashBalancePill: document.getElementById('dash-balance-pill'),
+        dashProgressTrack: document.getElementById('dash-progress-track'),
+        dashProgressFill: document.getElementById('dash-progress-fill'),
+        dashStatusText: document.getElementById('dash-status-text'),
+        dashRatioText: document.getElementById('dash-ratio-text'),
+        bdBmr: document.getElementById('bd-bmr'),
+        bdSteps: document.getElementById('bd-steps'),
+        bdSport: document.getElementById('bd-sport'),
+        bdTef: document.getElementById('bd-tef'),
+
+        // Profile
+        profileCard: document.getElementById('profile-card'),
+        profileToggle: document.getElementById('profile-toggle'),
+        profileSummary: document.getElementById('profile-summary'),
+        sexMale: document.getElementById('sex-male'),
+        sexFemale: document.getElementById('sex-female'),
+        profAge: document.getElementById('prof-age'),
+        profHeight: document.getElementById('prof-height'),
+        profWeight: document.getElementById('prof-weight'),
+
+        // Food & TEF
+        badgeEaten: document.getElementById('badge-eaten'),
+        foodForm: document.getElementById('food-form'),
+        foodKcal: document.getElementById('food-kcal'),
+        foodLabel: document.getElementById('food-label'),
+        foodList: document.getElementById('food-list'),
+        tefDisplay: document.getElementById('tef-display'),
+        tefRate: document.getElementById('tef-rate'),
+
+        // Steps
+        badgeSteps: document.getElementById('badge-steps'),
+        stepsTotal: document.getElementById('steps-total'),
+        stepsDeduct: document.getElementById('steps-deduct'),
+        autoDeductWrap: document.getElementById('auto-deduct-wrap'),
+        btnAutoDeduct: document.getElementById('btn-auto-deduct'),
+        stepsNetDisplay: document.getElementById('steps-net-display'),
+        stepsKcalDisplay: document.getElementById('steps-kcal-display'),
+
+        // Treadmill
+        badgeTreadmill: document.getElementById('badge-treadmill'),
+        tabTmDisplayed: document.getElementById('tab-tm-displayed'),
+        tabTmAcsm: document.getElementById('tab-tm-acsm'),
+        tmPanelDisplayed: document.getElementById('tm-panel-displayed'),
+        tmPanelAcsm: document.getElementById('tm-panel-acsm'),
+        treadmillForm: document.getElementById('treadmill-form'),
+        tmDispKcal: document.getElementById('tm-disp-kcal'),
+        tmDispDur: document.getElementById('tm-disp-dur'),
+        tmAcsmSpeed: document.getElementById('tm-acsm-speed'),
+        tmAcsmIncline: document.getElementById('tm-acsm-incline'),
+        tmAcsmDur: document.getElementById('tm-acsm-dur'),
+        tmNoHandles: document.getElementById('tm-no-handles'),
+        tmHandlesHint: document.getElementById('tm-handles-hint'),
+        tmPreviewMeta: document.getElementById('tm-preview-meta'),
+        tmPreviewKcal: document.getElementById('tm-preview-kcal'),
+        btnAddTreadmill: document.getElementById('btn-add-treadmill'),
+        treadmillList: document.getElementById('treadmill-list'),
+
+        // Musculation & Other sports
+        badgeOtherSport: document.getElementById('badge-other-sport'),
+        btnMuscuUpper: document.getElementById('btn-muscu-upper'),
+        btnMuscuLower: document.getElementById('btn-muscu-lower'),
+        activityPresets: document.getElementById('activity-presets'),
+        activityForm: document.getElementById('activity-form'),
+        actKcal: document.getElementById('act-kcal'),
+        actLabel: document.getElementById('act-label'),
+        activityList: document.getElementById('activity-list'),
+
+        // Reset & Toast
+        btnReset: document.getElementById('btn-reset'),
+        toast: document.getElementById('toast')
+      };
+
+      /* -----------------------------------------------------------------------
+         SYNCHRONISATION DES CHAMPS DE FORMULAIRE AU CHARGEMENT
+         ----------------------------------------------------------------------- */
+      function hydrateInputsFromState() {
+        dom.profAge.value = state.profile.age;
+        dom.profHeight.value = state.profile.height;
+        dom.profWeight.value = state.profile.weight;
+        dom.sexMale.classList.toggle('active', state.profile.sex === 'male');
+        dom.sexFemale.classList.toggle('active', state.profile.sex === 'female');
+
+        dom.tefRate.value = state.settings.tefRate;
+        dom.stepsTotal.value = state.daily.stepsTotal;
+        dom.stepsDeduct.value = state.daily.stepsDeduct;
+      }
+
+      /* -----------------------------------------------------------------------
+         APERÇU EN DIRECT DU MODULE TAPIS
+         ----------------------------------------------------------------------- */
+      function getDraftTreadmillSession() {
+        return {
+          mode: currentTreadmillMode,
+          displayedKcal: toNonNegNum(dom.tmDispKcal.value),
+          duration: currentTreadmillMode === 'displayed'
+            ? toNonNegNum(dom.tmDispDur.value)
+            : toNonNegNum(dom.tmAcsmDur.value),
+          speed: toNonNegNum(dom.tmAcsmSpeed.value),
+          incline: toNonNegNum(dom.tmAcsmIncline.value),
+          noHandles: dom.tmNoHandles.checked
+        };
+      }
+
+      function renderTreadmillPreview() {
+        const bmr = calculateBMR(state.profile);
+        const draft = getDraftTreadmillSession();
+        const net = Math.round(calculateTreadmillNetKcal(draft, state.profile, bmr));
+
+        const isValid = draft.mode === 'displayed'
+          ? draft.displayedKcal > 0
+          : (draft.speed > 0 && draft.duration > 0);
+
+        dom.tmPreviewKcal.textContent = `${formatInt(net)} kcal`;
+        dom.btnAddTreadmill.disabled = !isValid;
+
+        // Légende explicative claire selon le mode et l'option poignées
+        const handlesNote = draft.noHandles ? '' : ' · Poignées -20 %';
+        if (draft.mode === 'displayed') {
+          const bmrNote = draft.duration > 0 ? ' · BMR déduit' : '';
+          dom.tmPreviewMeta.textContent = `Correction -18 %${bmrNote}${handlesNote}`;
+        } else {
+          const gait = draft.speed > 8 ? 'Course' : 'Marche';
+          dom.tmPreviewMeta.textContent = `ACSM (${gait}) · BMR déduit${handlesNote}`;
+        }
+
+        dom.tmHandlesHint.textContent = draft.noHandles
+          ? 'Actif : aucune pénalité appliquée'
+          : 'Appui poignées : réduction supplémentaire de 20 %';
+      }
+
+      /* -----------------------------------------------------------------------
+         RENDU GLOBAL DE L'APPLICATION
+         ----------------------------------------------------------------------- */
+      function render() {
+        const bmrExact = calculateBMR(state.profile);
+        const bmrRounded = Math.round(bmrExact);
+
+        // 1. Profil résumé
+        const sexLabel = state.profile.sex === 'female' ? 'Femme' : 'Homme';
+        dom.profileSummary.textContent =
+          `${sexLabel} · ${state.profile.age} ans · ${state.profile.height} cm · ${state.profile.weight} kg · BMR ${formatInt(bmrRounded)} kcal`;
+
+        // 2. Pas (NEAT)
+        const stepsMetrics = calculateStepsMetrics(state.daily.stepsTotal, state.daily.stepsDeduct, state.profile);
+        const stepsKcal = Math.round(stepsMetrics.kcal);
+        dom.badgeSteps.textContent = `+${formatInt(stepsKcal)} kcal`;
+        dom.stepsNetDisplay.textContent =
+          `${formatInt(stepsMetrics.netSteps)} pas · ${stepsMetrics.distanceKm.toFixed(1).replace('.', ',')} km`;
+        dom.stepsKcalDisplay.textContent = `+${formatInt(stepsKcal)} kcal`;
+
+        // Bouton discret d'estimation auto des pas tapis
+        const estTreadmillSteps = estimateTreadmillSteps(state.daily.treadmillSessions, state.profile);
+        if (estTreadmillSteps > 0) {
+          dom.autoDeductWrap.classList.remove('hidden');
+          dom.btnAutoDeduct.textContent = `Déduire tapis (~${formatInt(estTreadmillSteps)} pas)`;
+          dom.btnAutoDeduct.dataset.estimate = String(estTreadmillSteps);
+        } else {
+          dom.autoDeductWrap.classList.add('hidden');
+        }
+
+        // 3. Tapis de marche (recalculé dynamiquement si le profil change)
+        let treadmillTotalKcal = 0;
+        const treadmillHtml = state.daily.treadmillSessions.map(s => {
+          const kcal = Math.round(calculateTreadmillNetKcal(s, state.profile, bmrExact));
+          treadmillTotalKcal += kcal;
+
+          let title = '';
+          let metaParts = [];
+          if (s.mode === 'displayed') {
+            title = `Tapis (${formatInt(s.displayedKcal)} kcal affichées)`;
+            if (s.duration > 0) metaParts.push(`${s.duration} min`);
+            metaParts.push('Corrigé -18 %');
+          } else {
+            title = `Tapis ACSM · ${s.speed} km/h`;
+            metaParts.push(`Pente ${s.incline}%`);
+            metaParts.push(`${s.duration} min`);
+          }
+          if (!s.noHandles) metaParts.push('Poignées (-20 %)');
+
+          return renderLogItem(s.id, title, metaParts.join(' · '), `+${formatInt(kcal)} kcal`, 'treadmill');
+        }).join('');
+
+        dom.treadmillList.innerHTML = treadmillHtml;
+        dom.badgeTreadmill.textContent = `+${formatInt(treadmillTotalKcal)} kcal`;
+        renderTreadmillPreview();
+
+        // 4. Musculation & autres activités
+        dom.btnMuscuUpper.classList.toggle('active', state.daily.muscuUpper);
+        dom.btnMuscuUpper.setAttribute('aria-pressed', String(state.daily.muscuUpper));
+        dom.btnMuscuLower.classList.toggle('active', state.daily.muscuLower);
+        dom.btnMuscuLower.setAttribute('aria-pressed', String(state.daily.muscuLower));
+
+        const muscuKcal = (state.daily.muscuUpper ? 150 : 0) + (state.daily.muscuLower ? 200 : 0);
+        let otherActKcal = 0;
+        const activityHtml = state.daily.otherActivities.map(act => {
+          const kcal = Math.round(toNonNegNum(act.kcal));
+          otherActKcal += kcal;
+          return renderLogItem(act.id, act.label, 'Activité sportive', `+${formatInt(kcal)} kcal`, 'activity');
+        }).join('');
+
+        dom.activityList.innerHTML = activityHtml;
+        const otherSportTotal = muscuKcal + otherActKcal;
+        dom.badgeOtherSport.textContent = `+${formatInt(otherSportTotal)} kcal`;
+
+        const totalSportKcal = treadmillTotalKcal + otherSportTotal;
+
+        // 5. Calories mangées & TEF
+        let totalEaten = 0;
+        const mealsHtml = state.daily.meals.map(meal => {
+          const kcal = Math.round(toNonNegNum(meal.kcal));
+          totalEaten += kcal;
+          return renderLogItem(meal.id, meal.label, meal.time || 'Repas', `${formatInt(kcal)} kcal`, 'meal');
+        }).join('');
+
+        dom.foodList.innerHTML = mealsHtml;
+        dom.badgeEaten.textContent = `${formatInt(totalEaten)} kcal`;
+
+        const tefKcal = Math.round(totalEaten * (state.settings.tefRate / 100));
+        dom.tefDisplay.textContent = `+${formatInt(tefKcal)} kcal (${state.settings.tefRate} %)`;
+
+        // 6. Tableau de bord global
+        const totalSpent = bmrRounded + stepsKcal + totalSportKcal + tefKcal;
+        const balance = totalEaten - totalSpent;
+
+        dom.dashSpent.textContent = formatInt(totalSpent);
+        dom.dashEaten.textContent = formatInt(totalEaten);
+        dom.dashBalance.textContent = formatSignedInt(balance);
+
+        dom.bdBmr.textContent = formatInt(bmrRounded);
+        dom.bdSteps.textContent = formatInt(stepsKcal);
+        dom.bdSport.textContent = formatInt(totalSportKcal);
+        dom.bdTef.textContent = formatInt(tefKcal);
+
+        // Indicateur visuel et barre de progression
+        let stateClass = 'state-deficit';
+        let barColor = 'var(--accent-green)';
+        let statusLabel = 'Déficit calorique';
+        let statusColor = 'var(--accent-green)';
+
+        if (balance === 0) {
+          stateClass = 'state-neutral';
+          barColor = 'var(--accent-neutral)';
+          statusLabel = 'Équilibre parfait';
+          statusColor = 'var(--accent-neutral)';
+        } else if (balance > 0 && balance <= 250) {
+          stateClass = 'state-slight-surplus';
+          barColor = 'var(--accent-orange)';
+          statusLabel = 'Léger surplus';
+          statusColor = 'var(--accent-orange)';
+        } else if (balance > 250) {
+          stateClass = 'state-high-surplus';
+          barColor = 'var(--accent-red)';
+          statusLabel = 'Surplus élevé';
+          statusColor = 'var(--accent-red)';
+        }
+
+        dom.dashBalancePill.className = `balance-pill ${stateClass} tabular`;
+        dom.dashStatusText.textContent = statusLabel;
+        dom.dashStatusText.style.color = statusColor;
+
+        const ratioPct = totalSpent > 0 ? Math.round((totalEaten / totalSpent) * 100) : 0;
+        const clampedWidth = Math.min(100, Math.max(0, ratioPct));
+        dom.dashProgressFill.style.width = `${clampedWidth}%`;
+        dom.dashProgressFill.style.backgroundColor = barColor;
+        dom.dashProgressTrack.setAttribute('aria-valuenow', String(clampedWidth));
+        dom.dashRatioText.textContent = `${ratioPct} % de la dépense`;
+      }
+
+      /**
+       * Génère le HTML d'une ligne d'historique avec bouton de suppression individuel
+       */
+      function renderLogItem(id, title, meta, kcalText, type) {
+        return `
+          <div class="log-item">
+            <div class="log-item-main">
+              <span class="log-item-title">${escapeHtml(title)}</span>
+              <span class="log-item-meta">${escapeHtml(meta)}</span>
+            </div>
+            <div class="log-item-right">
+              <span class="log-item-kcal tabular">${escapeHtml(kcalText)}</span>
+              <button type="button" class="btn-icon-delete" data-del-type="${type}" data-del-id="${id}" aria-label="Supprimer">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      /* -----------------------------------------------------------------------
+         GESTIONNAIRES D'ÉVÉNEMENTS
+         ----------------------------------------------------------------------- */
+
+      // 1. Tiroir Profil (accordéon)
+      dom.profileToggle.addEventListener('click', () => {
+        const isOpen = dom.profileCard.classList.toggle('open');
+        dom.profileToggle.setAttribute('aria-expanded', String(isOpen));
+      });
+
+      function setSex(sex) {
+        state.profile.sex = sex;
+        dom.sexMale.classList.toggle('active', sex === 'male');
+        dom.sexFemale.classList.toggle('active', sex === 'female');
+        saveState();
+        render();
+      }
+
+      dom.sexMale.addEventListener('click', () => setSex('male'));
+      dom.sexFemale.addEventListener('click', () => setSex('female'));
+
+      function handleProfileInput() {
+        const age = parseFloat(dom.profAge.value);
+        const height = parseFloat(dom.profHeight.value);
+        const weight = parseFloat(dom.profWeight.value);
+
+        if (Number.isFinite(age) && age > 0 && age <= 120) state.profile.age = age;
+        if (Number.isFinite(height) && height >= 80 && height <= 260) state.profile.height = height;
+        if (Number.isFinite(weight) && weight >= 20 && weight <= 300) state.profile.weight = weight;
+
+        saveState();
+        render();
+      }
+
+      [dom.profAge, dom.profHeight, dom.profWeight].forEach(input => {
+        input.addEventListener('input', handleProfileInput);
+      });
+
+      // 2. Calories mangées & TEF
+      dom.foodForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const kcal = Math.round(toNonNegNum(dom.foodKcal.value));
+        if (kcal <= 0) {
+          dom.foodKcal.focus();
+          return;
+        }
+
+        const customLabel = dom.foodLabel.value.trim();
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+        state.daily.meals.unshift({
+          id: createId(),
+          label: customLabel || `Repas #${state.daily.meals.length + 1}`,
+          kcal,
+          time: timeStr
+        });
+
+        dom.foodKcal.value = '';
+        dom.foodLabel.value = '';
+        saveState();
+        render();
+        showToast(`+${formatInt(kcal)} kcal ajoutées`);
+      });
+
+      dom.tefRate.addEventListener('input', () => {
+        if (dom.tefRate.value === '') {
+          state.settings.tefRate = 0;
+        } else {
+          state.settings.tefRate = clampNum(dom.tefRate.value, 0, 30, 10);
+        }
+        saveState();
+        render();
+      });
+
+      dom.tefRate.addEventListener('blur', () => {
+        dom.tefRate.value = state.settings.tefRate;
+      });
+
+      // 3. Pas quotidiens (NEAT)
+      dom.stepsTotal.addEventListener('input', () => {
+        state.daily.stepsTotal = dom.stepsTotal.value;
+        saveState();
+        render();
+      });
+
+      dom.stepsDeduct.addEventListener('input', () => {
+        state.daily.stepsDeduct = dom.stepsDeduct.value;
+        saveState();
+        render();
+      });
+
+      dom.btnAutoDeduct.addEventListener('click', () => {
+        const est = dom.btnAutoDeduct.dataset.estimate || '0';
+        dom.stepsDeduct.value = est;
+        state.daily.stepsDeduct = est;
+        saveState();
+        render();
+        showToast(`${formatInt(Number(est))} pas déduits`);
+      });
+
+      // 4. Module Tapis de marche
+      function switchTreadmillMode(mode) {
+        currentTreadmillMode = mode;
+        const isDisp = mode === 'displayed';
+
+        dom.tabTmDisplayed.classList.toggle('active', isDisp);
+        dom.tabTmDisplayed.setAttribute('aria-selected', String(isDisp));
+        dom.tabTmAcsm.classList.toggle('active', !isDisp);
+        dom.tabTmAcsm.setAttribute('aria-selected', String(!isDisp));
+
+        dom.tmPanelDisplayed.classList.toggle('hidden', !isDisp);
+        dom.tmPanelAcsm.classList.toggle('hidden', isDisp);
+
+        renderTreadmillPreview();
+      }
+
+      dom.tabTmDisplayed.addEventListener('click', () => switchTreadmillMode('displayed'));
+      dom.tabTmAcsm.addEventListener('click', () => switchTreadmillMode('acsm'));
+
+      [dom.tmDispKcal, dom.tmDispDur, dom.tmAcsmSpeed, dom.tmAcsmIncline, dom.tmAcsmDur, dom.tmNoHandles].forEach(el => {
+        el.addEventListener('input', renderTreadmillPreview);
+        el.addEventListener('change', renderTreadmillPreview);
+      });
+
+      dom.treadmillForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const draft = getDraftTreadmillSession();
+
+        if (draft.mode === 'displayed' && draft.displayedKcal <= 0) return;
+        if (draft.mode === 'acsm' && (draft.speed <= 0 || draft.duration <= 0)) return;
+
+        const session = {
+          id: createId(),
+          ...draft
+        };
+
+        const bmr = calculateBMR(state.profile);
+        const net = Math.round(calculateTreadmillNetKcal(session, state.profile, bmr));
+
+        state.daily.treadmillSessions.unshift(session);
+
+        // Réinitialise uniquement les champs numériques de saisie
+        dom.tmDispKcal.value = '';
+        dom.tmDispDur.value = '';
+        dom.tmAcsmSpeed.value = '';
+        dom.tmAcsmIncline.value = '';
+        dom.tmAcsmDur.value = '';
+
+        saveState();
+        render();
+        showToast(`Séance tapis ajoutée (+${formatInt(net)} kcal)`);
+      });
+
+      // 5. Musculation & autres activités
+      dom.btnMuscuUpper.addEventListener('click', () => {
+        state.daily.muscuUpper = !state.daily.muscuUpper;
+        saveState();
+        render();
+      });
+
+      dom.btnMuscuLower.addEventListener('click', () => {
+        state.daily.muscuLower = !state.daily.muscuLower;
+        saveState();
+        render();
+      });
+
+      dom.activityPresets.addEventListener('click', (e) => {
+        const chip = e.target.closest('.chip');
+        if (!chip) return;
+        selectedActivityPreset = chip.dataset.preset;
+        dom.activityPresets.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        dom.actLabel.placeholder = selectedActivityPreset === 'Autre' ? 'Nom de l\'activité' : `Libellé (${selectedActivityPreset})`;
+      });
+
+      dom.activityForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const kcal = Math.round(toNonNegNum(dom.actKcal.value));
+        if (kcal <= 0) {
+          dom.actKcal.focus();
+          return;
+        }
+
+        const customLabel = dom.actLabel.value.trim();
+        const label = customLabel || (selectedActivityPreset === 'Autre' ? 'Autre activité' : selectedActivityPreset);
+
+        state.daily.otherActivities.unshift({
+          id: createId(),
+          label,
+          kcal
+        });
+
+        dom.actKcal.value = '';
+        dom.actLabel.value = '';
+        saveState();
+        render();
+        showToast(`${label} (+${formatInt(kcal)} kcal)`);
+      });
+
+      // 6. Délégation d'événements pour la suppression individuelle dans toutes les listes
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-icon-delete');
+        if (!btn) return;
+
+        const { delType, delId } = btn.dataset;
+        if (delType === 'treadmill') {
+          state.daily.treadmillSessions = state.daily.treadmillSessions.filter(x => x.id !== delId);
+        } else if (delType === 'activity') {
+          state.daily.otherActivities = state.daily.otherActivities.filter(x => x.id !== delId);
+        } else if (delType === 'meal') {
+          state.daily.meals = state.daily.meals.filter(x => x.id !== delId);
+        } else {
+          return;
+        }
+
+        saveState();
+        render();
+      });
+
+      // 7. Réinitialisation de la journée avec confirmation douce en 2 temps (sans window.confirm)
+      function cancelResetConfirm() {
+        clearTimeout(resetConfirmTimer);
+        resetConfirmTimer = null;
+        dom.btnReset.classList.remove('confirming');
+        dom.btnReset.textContent = 'Réinitialiser la journée';
+      }
+
+      dom.btnReset.addEventListener('click', () => {
+        if (!dom.btnReset.classList.contains('confirming')) {
+          dom.btnReset.classList.add('confirming');
+          dom.btnReset.textContent = 'Confirmer la réinitialisation ?';
+          resetConfirmTimer = setTimeout(cancelResetConfirm, 4000);
+          return;
+        }
+
+        // Deuxième clic : exécution de la réinitialisation tout en conservant le profil et le taux TEF
+        cancelResetConfirm();
+        state.daily = getDefaultState().daily;
+        dom.stepsTotal.value = '';
+        dom.stepsDeduct.value = '';
+        saveState();
+        render();
+        showToast('Journée réinitialisée');
+      });
+
+      /* -----------------------------------------------------------------------
+         INITIALISATION
+         ----------------------------------------------------------------------- */
+      hydrateInputsFromState();
+      render();
+    })();
+  </script>
+</body>
+</html>
